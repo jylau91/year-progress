@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0c0d10" />
+  <meta name="description" content="A live, minimalist visualization of the year in days." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='32' fill='%23ff4757'/%3E%3C/svg%3E" />
+  <title>Year Progress</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b0c0f;
+      --bg-soft: #111216;
+      --ink: #f2f2f0;
+      --muted: #74767c;
+      --faint: #3d3f45;
+      --past: #7c7e83;
+      --future: #d5d6d4;
+      --accent: #ff4757;
+      --dot: clamp(7px, 1.85vw, 13px);
+      --gap: clamp(6px, 1.65vw, 12px);
+      --tracking: .28em;
+      --mono: "SFMono-Regular", "SF Mono", "Roboto Mono", "IBM Plex Mono", "Courier New", monospace;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { min-height: 100%; }
+    body {
+      margin: 0;
+      overflow-x: hidden;
+      background:
+        radial-gradient(circle at 50% 16%, rgba(255,255,255,.025), transparent 30%),
+        linear-gradient(180deg, #0c0d10 0%, #0a0b0e 100%);
+      color: var(--ink);
+      font-family: var(--mono);
+      font-variant-numeric: tabular-nums;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: .11;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.26'/%3E%3C/svg%3E");
+      mix-blend-mode: soft-light;
+    }
+
+    main {
+      width: min(100%, 790px);
+      min-height: 100svh;
+      margin: 0 auto;
+      padding: max(30px, env(safe-area-inset-top)) clamp(22px, 6vw, 64px) max(30px, env(safe-area-inset-bottom));
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .progress-rail {
+      position: relative;
+      height: 20px;
+      margin-bottom: clamp(22px, 5vw, 42px);
+      color: #55575d;
+      font-size: 9px;
+      letter-spacing: .24em;
+    }
+
+    .progress-rail::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 9px;
+      height: 1px;
+      background: repeating-linear-gradient(90deg, #292b30 0 1px, transparent 1px calc(8.333%));
+      border-left: 1px solid #292b30;
+      border-right: 1px solid #292b30;
+    }
+
+    .rail-year, .rail-day { position: absolute; top: 0; }
+    .rail-year { left: 0; }
+    .rail-day { right: 0; }
+    .rail-marker {
+      position: absolute;
+      top: 6px;
+      left: var(--progress);
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 10px rgba(255, 71, 87, .8);
+      transform: translateX(-50%);
+    }
+
+    h1 {
+      margin: 0 0 clamp(42px, 8vw, 68px);
+      text-align: center;
+      font-size: clamp(20px, 4.8vw, 35px);
+      line-height: 1.25;
+      letter-spacing: .18em;
+      font-weight: 650;
+      text-transform: uppercase;
+      text-shadow: 0 0 12px rgba(255,255,255,.12);
+    }
+
+    .calendar {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      column-gap: clamp(22px, 5.5vw, 48px);
+      row-gap: clamp(34px, 6vw, 54px);
+    }
+
+    .month {
+      position: relative;
+      min-width: 0;
+    }
+
+    .month-name {
+      margin: 0 0 13px;
+      color: var(--muted);
+      font-size: clamp(10px, 2vw, 13px);
+      line-height: 1;
+      letter-spacing: .38em;
+      text-transform: uppercase;
+      font-weight: 650;
+    }
+
+    .month.current .month-name { color: var(--ink); }
+
+    .quarter {
+      position: absolute;
+      right: calc(100% + clamp(8px, 1.7vw, 16px));
+      top: 43%;
+      color: #707279;
+      font-size: clamp(8px, 1.6vw, 11px);
+      letter-spacing: .22em;
+      font-weight: 650;
+      white-space: nowrap;
+    }
+
+    .days {
+      display: grid;
+      grid-template-columns: repeat(7, var(--dot));
+      grid-auto-rows: var(--dot);
+      gap: var(--gap);
+      justify-content: start;
+    }
+
+    .day {
+      width: var(--dot);
+      height: var(--dot);
+      border-radius: 50%;
+    }
+
+    .day.empty { opacity: 0; }
+    .day.past {
+      background: var(--past);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.05);
+    }
+    .day.future {
+      border: clamp(1.3px, .25vw, 2px) solid var(--future);
+      opacity: .92;
+    }
+    .day.today {
+      background: var(--accent);
+      box-shadow: 0 0 7px 2px rgba(255,71,87,.75), 0 0 17px rgba(255,71,87,.35);
+      animation: breathe 2.8s ease-in-out infinite;
+    }
+
+    .status {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 20px;
+      margin-top: clamp(28px, 5.5vw, 48px);
+      color: #8a8c91;
+      font-size: clamp(11px, 2.25vw, 15px);
+      line-height: 1.5;
+      letter-spacing: .24em;
+      font-weight: 650;
+      text-transform: uppercase;
+    }
+    .status strong { color: var(--ink); font-weight: 650; }
+    .day-count { text-align: right; white-space: nowrap; }
+
+    .message {
+      margin: clamp(40px, 7vw, 64px) 0 0;
+      color: #6d6f75;
+      text-align: center;
+      font-size: clamp(9px, 1.8vw, 12px);
+      letter-spacing: .3em;
+      line-height: 1.8;
+      text-transform: uppercase;
+    }
+
+    @keyframes breathe {
+      0%, 100% { transform: scale(.96); filter: brightness(.96); }
+      50% { transform: scale(1.08); filter: brightness(1.12); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .day.today { animation: none; }
+    }
+
+    @media (max-width: 520px) {
+      :root {
+        --dot: 7px;
+        --gap: 5px;
+      }
+      main {
+        width: 100%;
+        justify-content: flex-start;
+        padding: max(24px, env(safe-area-inset-top)) 22px max(22px, env(safe-area-inset-bottom)) 30px;
+      }
+      .progress-rail { margin-bottom: 18px; }
+      h1 {
+        margin-bottom: 32px;
+        font-size: clamp(17px, 4.7vw, 20px);
+        white-space: nowrap;
+      }
+      .calendar {
+        column-gap: clamp(16px, 5vw, 24px);
+        row-gap: 27px;
+      }
+      .month-name { margin-bottom: 10px; }
+      .quarter { right: calc(100% + 6px); }
+      .status { margin-top: 25px; }
+      .message { margin-top: 30px; }
+    }
+
+    @media (max-width: 360px) {
+      main { padding-left: 26px; padding-right: 16px; }
+      .calendar { column-gap: 10px; }
+      .quarter { font-size: 7px; right: calc(100% + 4px); }
+      .status { letter-spacing: .16em; }
+    }
+  </style>
+</head>
+<body>
+  <main aria-label="Live year progress calendar">
+    <div class="progress-rail" aria-hidden="true">
+      <span class="rail-year" id="railYear"></span>
+      <span class="rail-day" id="railDay"></span>
+      <i class="rail-marker" id="railMarker"></i>
+    </div>
+
+    <h1><span id="headlineYear"></span> is <span id="percent"></span>% complete.</h1>
+
+    <section class="calendar" id="calendar" aria-label="Calendar year"></section>
+
+    <div class="status">
+      <div><strong>Today · <span id="todayLabel"></span></strong></div>
+      <div class="day-count">Day <span id="dayNumber"></span> / <span id="daysInYear"></span></div>
+    </div>
+
+    <p class="message">You have enough time to make things happen.</p>
+  </main>
+
+  <script>
+    (() => {
+      const tz = 'Asia/Singapore';
+      const now = new Date();
+      const parts = Object.fromEntries(
+        new Intl.DateTimeFormat('en-CA', {
+          timeZone: tz, year: 'numeric', month: 'numeric', day: 'numeric'
+        }).formatToParts(now).filter(p => p.type !== 'literal').map(p => [p.type, Number(p.value)])
+      );
+      const year = parts.year;
+      const monthNow = parts.month - 1;
+      const dateNow = parts.day;
+      const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+      const totalDays = leap ? 366 : 365;
+      const utcToday = Date.UTC(year, monthNow, dateNow);
+      const dayOfYear = Math.floor((utcToday - Date.UTC(year, 0, 1)) / 86400000) + 1;
+      const progress = dayOfYear / totalDays;
+      const percent = Math.floor(progress * 100);
+      const monthNames = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+      const calendar = document.getElementById('calendar');
+
+      document.documentElement.style.setProperty('--progress', `${(progress * 100).toFixed(3)}%`);
+      document.getElementById('railYear').textContent = year;
+      document.getElementById('railDay').textContent = `${dayOfYear}/${totalDays}`;
+      document.getElementById('headlineYear').textContent = year;
+      document.getElementById('percent').textContent = percent;
+      document.getElementById('todayLabel').textContent = `${monthNames[monthNow]} ${String(dateNow).padStart(2, '0')}`;
+      document.getElementById('dayNumber').textContent = dayOfYear;
+      document.getElementById('daysInYear').textContent = totalDays;
+      document.title = `${year} is ${percent}% complete`;
+
+      for (let month = 0; month < 12; month++) {
+        const section = document.createElement('section');
+        section.className = `month${month === monthNow ? ' current' : ''}`;
+        section.setAttribute('aria-label', new Intl.DateTimeFormat('en', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(Date.UTC(year, month, 1))));
+
+        const heading = document.createElement('h2');
+        heading.className = 'month-name';
+        heading.textContent = monthNames[month];
+        section.appendChild(heading);
+
+        if (month % 3 === 0) {
+          const q = document.createElement('span');
+          q.className = 'quarter';
+          q.textContent = `Q${Math.floor(month / 3) + 1}`;
+          section.appendChild(q);
+        }
+
+        const grid = document.createElement('div');
+        grid.className = 'days';
+        const firstWeekday = new Date(Date.UTC(year, month, 1)).getUTCDay();
+        const count = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+
+        for (let i = 0; i < firstWeekday; i++) {
+          const empty = document.createElement('i');
+          empty.className = 'day empty';
+          grid.appendChild(empty);
+        }
+
+        for (let day = 1; day <= count; day++) {
+          const dot = document.createElement('i');
+          const stamp = Date.UTC(year, month, day);
+          const state = stamp < utcToday ? 'past' : stamp === utcToday ? 'today' : 'future';
+          dot.className = `day ${state}`;
+          dot.title = `${monthNames[month]} ${day}, ${year}`;
+          dot.setAttribute('aria-label', `${monthNames[month]} ${day}, ${state === 'today' ? 'today' : state}`);
+          grid.appendChild(dot);
+        }
+
+        section.appendChild(grid);
+        calendar.appendChild(section);
+      }
+    })();
+  </script>
+</body>
+</html>
