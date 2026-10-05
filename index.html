@@ -18,6 +18,7 @@
       --past: #7c7e83;
       --future: #d5d6d4;
       --accent: #ff4757;
+      --sport: #ff9f1c;
       --dot: clamp(7px, 1.85vw, 13px);
       --gap: clamp(6px, 1.65vw, 12px);
       --tracking: .28em;
@@ -28,7 +29,7 @@
     html, body { min-height: 100%; }
     body {
       margin: 0;
-      overflow-x: hidden;
+      overflow-x: auto;
       background:
         radial-gradient(circle at 50% 16%, rgba(255,255,255,.025), transparent 30%),
         linear-gradient(180deg, #0c0d10 0%, #0a0b0e 100%);
@@ -49,7 +50,7 @@
     }
 
     main {
-      width: min(100%, 790px);
+      width: min(100%, 1580px);
       min-height: 100svh;
       margin: 0 auto;
       padding: max(30px, env(safe-area-inset-top)) clamp(22px, 6vw, 64px) max(30px, env(safe-area-inset-bottom));
@@ -103,6 +104,29 @@
       font-weight: 650;
       text-transform: uppercase;
       text-shadow: 0 0 12px rgba(255,255,255,.12);
+    }
+
+    .years {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(680px, 1fr));
+      gap: clamp(34px, 4vw, 72px);
+      align-items: start;
+    }
+
+    .year-panel {
+      min-width: 0;
+      padding: clamp(24px, 3vw, 38px);
+      border: 1px solid #24262b;
+      border-radius: 18px;
+      background: rgba(17, 18, 22, .7);
+    }
+
+    .year-heading {
+      margin: 0 0 28px;
+      color: var(--ink);
+      font-size: clamp(16px, 2vw, 23px);
+      letter-spacing: .3em;
+      text-align: right;
     }
 
     .calendar {
@@ -168,6 +192,48 @@
       box-shadow: 0 0 7px 2px rgba(255,71,87,.75), 0 0 17px rgba(255,71,87,.35);
       animation: breathe 2.8s ease-in-out infinite;
     }
+    .day.event {
+      border: 0;
+      background: var(--sport);
+      box-shadow: 0 0 8px 2px rgba(255,159,28,.72), 0 0 18px rgba(255,159,28,.3);
+      animation: none;
+      cursor: help;
+    }
+
+    .event-legend {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin-top: clamp(24px, 3vw, 38px);
+      color: #a6a8ad;
+      font-size: 10px;
+      letter-spacing: .25em;
+      text-transform: uppercase;
+    }
+    .event-legend::before {
+      content: "";
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--sport);
+      box-shadow: 0 0 8px rgba(255,159,28,.7);
+    }
+
+    .event-list {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 8px 20px;
+      margin: 13px 0 0;
+      padding: 0;
+      color: #777980;
+      font-size: 9px;
+      line-height: 1.6;
+      letter-spacing: .12em;
+      list-style: none;
+      text-transform: uppercase;
+    }
 
     .status {
       display: flex;
@@ -210,7 +276,8 @@
         --gap: 5px;
       }
       main {
-        width: 100%;
+        width: max-content;
+        min-width: 1420px;
         justify-content: flex-start;
         padding: max(24px, env(safe-area-inset-top)) 22px max(22px, env(safe-area-inset-bottom)) 30px;
       }
@@ -224,6 +291,8 @@
         column-gap: clamp(16px, 5vw, 24px);
         row-gap: 27px;
       }
+      .years { gap: 28px; }
+      .year-panel { padding: 26px; }
       .month-name { margin-bottom: 10px; }
       .quarter { right: calc(100% + 6px); }
       .status { margin-top: 25px; }
@@ -248,7 +317,10 @@
 
     <h1><span id="headlineYear"></span> is <span id="percent"></span>% complete.</h1>
 
-    <section class="calendar" id="calendar" aria-label="Calendar year"></section>
+    <section class="years" id="years" aria-label="Two-year calendar"></section>
+
+    <div class="event-legend">Sporting event</div>
+    <ul class="event-list" id="eventList" aria-label="Sporting events"></ul>
 
     <div class="status">
       <div><strong>Today · <span id="todayLabel"></span></strong></div>
@@ -277,7 +349,13 @@
       const progress = dayOfYear / totalDays;
       const percent = Math.floor(progress * 100);
       const monthNames = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
-      const calendar = document.getElementById('calendar');
+      const yearsContainer = document.getElementById('years');
+      const sportingEvents = [
+        { date: '2026-11-08', name: 'TDF SG Criterium' },
+        { date: '2027-04-10', name: 'T100 SG Sprint' },
+        { date: '2027-07-25', name: 'Ironman 70.3 Desaru' }
+      ];
+      const eventsByDate = new Map(sportingEvents.map(event => [event.date, event.name]));
 
       document.documentElement.style.setProperty('--progress', `${(progress * 100).toFixed(3)}%`);
       document.getElementById('railYear').textContent = year;
@@ -289,47 +367,80 @@
       document.getElementById('daysInYear').textContent = totalDays;
       document.title = `${year} is ${percent}% complete`;
 
-      for (let month = 0; month < 12; month++) {
-        const section = document.createElement('section');
-        section.className = `month${month === monthNow ? ' current' : ''}`;
-        section.setAttribute('aria-label', new Intl.DateTimeFormat('en', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(Date.UTC(year, month, 1))));
+      function renderYear(calendarYear) {
+        const panel = document.createElement('article');
+        panel.className = 'year-panel';
+        panel.dataset.year = calendarYear;
 
-        const heading = document.createElement('h2');
-        heading.className = 'month-name';
-        heading.textContent = monthNames[month];
-        section.appendChild(heading);
+        const yearHeading = document.createElement('h2');
+        yearHeading.className = 'year-heading';
+        yearHeading.textContent = calendarYear;
+        panel.appendChild(yearHeading);
 
-        if (month % 3 === 0) {
-          const q = document.createElement('span');
-          q.className = 'quarter';
-          q.textContent = `Q${Math.floor(month / 3) + 1}`;
-          section.appendChild(q);
+        const calendar = document.createElement('section');
+        calendar.className = 'calendar';
+        calendar.setAttribute('aria-label', `${calendarYear} calendar`);
+
+        for (let month = 0; month < 12; month++) {
+          const section = document.createElement('section');
+          section.className = `month${calendarYear === year && month === monthNow ? ' current' : ''}`;
+          section.setAttribute('aria-label', new Intl.DateTimeFormat('en', {
+            month: 'long', year: 'numeric', timeZone: 'UTC'
+          }).format(new Date(Date.UTC(calendarYear, month, 1))));
+
+          const heading = document.createElement('h3');
+          heading.className = 'month-name';
+          heading.textContent = monthNames[month];
+          section.appendChild(heading);
+
+          if (month % 3 === 0) {
+            const q = document.createElement('span');
+            q.className = 'quarter';
+            q.textContent = `Q${Math.floor(month / 3) + 1}`;
+            section.appendChild(q);
+          }
+
+          const grid = document.createElement('div');
+          grid.className = 'days';
+          const firstWeekday = new Date(Date.UTC(calendarYear, month, 1)).getUTCDay();
+          const count = new Date(Date.UTC(calendarYear, month + 1, 0)).getUTCDate();
+
+          for (let i = 0; i < firstWeekday; i++) {
+            const empty = document.createElement('i');
+            empty.className = 'day empty';
+            grid.appendChild(empty);
+          }
+
+          for (let day = 1; day <= count; day++) {
+            const dot = document.createElement('i');
+            const stamp = Date.UTC(calendarYear, month, day);
+            const state = stamp < utcToday ? 'past' : stamp === utcToday ? 'today' : 'future';
+            const isoDate = `${calendarYear}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            const eventName = eventsByDate.get(isoDate);
+            dot.className = `day ${state}${eventName ? ' event' : ''}`;
+            dot.dataset.date = isoDate;
+            if (eventName) dot.dataset.event = eventName;
+            dot.title = `${monthNames[month]} ${day}, ${calendarYear}${eventName ? ` · ${eventName}` : ''}`;
+            dot.setAttribute('aria-label', eventName
+              ? `${monthNames[month]} ${day}, ${calendarYear}, sporting event: ${eventName}`
+              : `${monthNames[month]} ${day}, ${state === 'today' ? 'today' : state}`);
+            grid.appendChild(dot);
+          }
+
+          section.appendChild(grid);
+          calendar.appendChild(section);
         }
 
-        const grid = document.createElement('div');
-        grid.className = 'days';
-        const firstWeekday = new Date(Date.UTC(year, month, 1)).getUTCDay();
-        const count = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
-
-        for (let i = 0; i < firstWeekday; i++) {
-          const empty = document.createElement('i');
-          empty.className = 'day empty';
-          grid.appendChild(empty);
-        }
-
-        for (let day = 1; day <= count; day++) {
-          const dot = document.createElement('i');
-          const stamp = Date.UTC(year, month, day);
-          const state = stamp < utcToday ? 'past' : stamp === utcToday ? 'today' : 'future';
-          dot.className = `day ${state}`;
-          dot.title = `${monthNames[month]} ${day}, ${year}`;
-          dot.setAttribute('aria-label', `${monthNames[month]} ${day}, ${state === 'today' ? 'today' : state}`);
-          grid.appendChild(dot);
-        }
-
-        section.appendChild(grid);
-        calendar.appendChild(section);
+        panel.appendChild(calendar);
+        yearsContainer.appendChild(panel);
       }
+
+      [year, year + 1].forEach(renderYear);
+
+      document.getElementById('eventList').innerHTML = sportingEvents.map(event => {
+        const [eventYear, eventMonth, eventDay] = event.date.split('-').map(Number);
+        return `<li>${String(eventDay).padStart(2, '0')} ${monthNames[eventMonth - 1]} ${eventYear} · ${event.name}</li>`;
+      }).join('');
     })();
   </script>
 </body>
